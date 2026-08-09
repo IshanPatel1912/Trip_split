@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "102333387950",
+    "project_id": "tripsplitcloud",
+    "storage_bucket": "tripsplitcloud.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:102333387950:android:82a0cf8e2544013d61893f",
+        "android_client_info": {
+          "package_name": "com.example.trip_split"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "102333387950-jradka6rij4ona2nm2u70f497m5k9pfd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-iHFjappsjKXJZDOEDvR19OeeLKVyUrA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "102333387950-jradka6rij4ona2nm2u70f497m5k9pfd.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "102333387950-mrv9p66ipj7rpnd871lv5qpue7fbamtt.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tripSplit"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
