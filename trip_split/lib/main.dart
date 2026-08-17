@@ -433,6 +433,8 @@ class TripDetailScreen extends StatefulWidget {
 
 class _TripDetailScreenState extends State<TripDetailScreen> {
   int _selectedIndex = 0;
+  String _sortOption = 'newest';
+  String _filterPayerId = 'all';
 
   // We now pass the live trip into this function so it uploads the newest version
   Future<void> _updateCloudTrip(Trip liveTrip) async {
@@ -633,6 +635,12 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 
+  // ==========================================
+  // EXPENSE LIST WITH DYNAMIC SORTING
+  // ==========================================
+  // ==========================================
+  // EXPENSE LIST WITH PAYER FILTER & SORTING
+  // ==========================================
   Widget _buildExpenseList(Trip liveTrip) {
     if (liveTrip.expenses.isEmpty) {
       return Center(
@@ -647,82 +655,392 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: liveTrip.expenses.reversed.map((e) {
-        final payerName = liveTrip.people.firstWhere((p) => p.id == e.payerId, orElse: () => Person(id: '0', name: 'Unknown', email: '')).name;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)]),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.receipt, color: Color(0xFF10B981))),
-            title: Text(e.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            subtitle: Text("$payerName paid", style: TextStyle(color: Colors.grey[500])),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("₹${e.amount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
-                
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  onSelected: (value) async {
-                    if (value == 'edit') {
-                      await Navigator.push(context, MaterialPageRoute(builder: (context) => AddExpenseScreen(trip: liveTrip, expenseToEdit: e)));
-                      _updateCloudTrip(liveTrip);
-                    } else if (value == 'delete') {
-                      liveTrip.expenses.removeWhere((exp) => exp.id == e.id);
-                      _updateCloudTrip(liveTrip);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Expense deleted")));
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 20), SizedBox(width: 8), Text("Edit")])),
-                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Delete")])),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
+    // 1. Filter expenses based on selected payer
+    List<Expense> filteredExpenses = liveTrip.expenses.where((e) {
+      if (_filterPayerId == 'all') return true;
+      return e.payerId == _filterPayerId;
+    }).toList();
 
-  Widget _buildBalances(Trip liveTrip) {
-    Map<String, double> balances = { for (var p in liveTrip.people) p.id: 0.0 };
-    for (var e in liveTrip.expenses) {
-      balances[e.payerId] = (balances[e.payerId] ?? 0) + e.amount;
-      double split = e.amount / e.involvedIds.length;
-      for (var id in e.involvedIds) balances[id] = (balances[id] ?? 0) - split;
+    // 2. Sort the filtered list
+    if (_sortOption == 'newest') {
+      filteredExpenses = filteredExpenses.reversed.toList();
+    } else if (_sortOption == 'oldest') {
+      // Retains default insertion order
+    } else if (_sortOption == 'highest') {
+      filteredExpenses.sort((a, b) => b.amount.compareTo(a.amount));
+    } else if (_sortOption == 'lowest') {
+      filteredExpenses.sort((a, b) => a.amount.compareTo(b.amount));
     }
+
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: liveTrip.people.map((p) {
-        double bal = balances[p.id] ?? 0;
-        if (bal.abs() < 0.1) return const SizedBox.shrink();
-        
-        bool isPositive = bal > 0;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(color: isPositive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(20)),
-              child: Text(
-                isPositive ? "+ ₹${bal.toStringAsFixed(0)}" : "- ₹${bal.abs().toStringAsFixed(0)}",
-                style: TextStyle(color: isPositive ? const Color(0xFF10B981) : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16),
+      children: [
+        // 3. Horizontal Payer Filter Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: const Text("All Payers"),
+                selected: _filterPayerId == 'all',
+                selectedColor: const Color(0xFF4F46E5),
+                labelStyle: TextStyle(
+                  color: _filterPayerId == 'all' ? Colors.white : const Color(0xFF1F2937),
+                  fontWeight: FontWeight.bold,
+                ),
+                showCheckmark: false,
+                onSelected: (selected) {
+                  if (selected) setState(() => _filterPayerId = 'all');
+                },
+              ),
+              const SizedBox(width: 8),
+              ...liveTrip.people.map((p) {
+                final isSelected = _filterPayerId == p.id;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text("Paid by ${p.name}"),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFF4F46E5),
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : const Color(0xFF1F2937),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    showCheckmark: false,
+                    onSelected: (selected) {
+                      setState(() {
+                        _filterPayerId = selected ? p.id : 'all';
+                      });
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // 4. Header with Count & Sort Control
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "${filteredExpenses.length} ${filteredExpenses.length == 1 ? 'Expense' : 'Expenses'}",
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1F2937), fontSize: 16),
+              ),
+              PopupMenuButton<String>(
+                initialValue: _sortOption,
+                onSelected: (value) => setState(() => _sortOption = value),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.sort, size: 18, color: Color(0xFF4F46E5)),
+                      const SizedBox(width: 6),
+                      Text(
+                        _getSortLabel(_sortOption),
+                        style: const TextStyle(color: Color(0xFF4F46E5), fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'newest', child: Text("Newest First")),
+                  const PopupMenuItem(value: 'oldest', child: Text("Oldest First")),
+                  const PopupMenuItem(value: 'highest', child: Text("Highest Amount (₹↓)")),
+                  const PopupMenuItem(value: 'lowest', child: Text("Lowest Amount (₹↑)")),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // 5. Empty State for Filter
+        if (filteredExpenses.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.filter_alt_off_outlined, size: 48, color: Colors.grey[400]),
+                  const SizedBox(height: 12),
+                  Text(
+                    "No expenses paid by this person",
+                    style: TextStyle(color: Colors.grey[600], fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                ],
               ),
             ),
-          ),
-        );
-      }).toList(),
+          )
+        else
+          // 6. Render Filtered & Sorted Expense Cards
+          ...filteredExpenses.map((e) {
+            final payerName = liveTrip.people.firstWhere(
+              (p) => p.id == e.payerId,
+              orElse: () => Person(id: '0', name: 'Unknown', email: ''),
+            ).name;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)],
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.receipt, color: Color(0xFF10B981)),
+                ),
+                title: Text(e.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                subtitle: Text("$payerName paid • ${e.involvedIds.length} split", style: TextStyle(color: Colors.grey[500])),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "₹${e.amount.toStringAsFixed(0)}",
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => AddExpenseScreen(trip: liveTrip, expenseToEdit: e)),
+                          );
+                          _updateCloudTrip(liveTrip);
+                        } else if (value == 'delete') {
+                          liveTrip.expenses.removeWhere((exp) => exp.id == e.id);
+                          _updateCloudTrip(liveTrip);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Expense deleted")));
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 20), SizedBox(width: 8), Text("Edit")])),
+                        const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Delete")])),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
     );
   }
 }
+
+  // Helper to get user-friendly label for current sort
+  String _getSortLabel(String option) {
+    switch (option) {
+      case 'oldest':
+        return 'Oldest';
+      case 'highest':
+        return 'Amount: High to Low';
+      case 'lowest':
+        return 'Amount: Low to High';
+      case 'newest':
+      default:
+        return 'Newest';
+    }
+  }
+
+  // ==========================================
+  // SPLITWISE-STYLE DEBT SIMPLIFICATION & SETTLEMENTS
+  // ==========================================
+  Widget _buildBalances(Trip liveTrip) {
+    // 1. Calculate net balances for each person
+    Map<String, double> balances = { for (var p in liveTrip.people) p.id: 0.0 };
+    for (var e in liveTrip.expenses) {
+      if (e.involvedIds.isEmpty) continue;
+      balances[e.payerId] = (balances[e.payerId] ?? 0) + e.amount;
+      double split = e.amount / e.involvedIds.length;
+      for (var id in e.involvedIds) {
+        balances[id] = (balances[id] ?? 0) - split;
+      }
+    }
+
+    // 2. Separate into Debtors (owes money) and Creditors (receives money)
+    List<MapEntry<String, double>> debtors = [];
+    List<MapEntry<String, double>> creditors = [];
+
+    balances.forEach((id, amount) {
+      double rounded = (amount * 100).roundToDouble() / 100;
+      if (rounded < -0.01) {
+        debtors.add(MapEntry(id, -rounded)); // Store as positive debt value
+      } else if (rounded > 0.01) {
+        creditors.add(MapEntry(id, rounded));
+      }
+    });
+
+    // 3. Match debtors and creditors (Splitwise Greedy Settlement)
+    List<Map<String, dynamic>> settlements = [];
+    int d = 0;
+    int c = 0;
+
+    List<double> debtorAmounts = debtors.map((e) => e.value).toList();
+    List<double> creditorAmounts = creditors.map((e) => e.value).toList();
+
+    while (d < debtors.length && c < creditors.length) {
+      double debtorOwes = debtorAmounts[d];
+      double creditorGets = creditorAmounts[c];
+      double settledAmount = debtorOwes < creditorGets ? debtorOwes : creditorGets;
+
+      String fromName = liveTrip.people.firstWhere(
+        (p) => p.id == debtors[d].key,
+        orElse: () => Person(id: '', name: 'Unknown', email: ''),
+      ).name;
+
+      String toName = liveTrip.people.firstWhere(
+        (p) => p.id == creditors[c].key,
+        orElse: () => Person(id: '', name: 'Unknown', email: ''),
+      ).name;
+
+      settlements.add({
+        'from': fromName,
+        'to': toName,
+        'amount': settledAmount,
+      });
+
+      debtorAmounts[d] -= settledAmount;
+      creditorAmounts[c] -= settledAmount;
+
+      if (debtorAmounts[d] < 0.01) d++;
+      if (creditorAmounts[c] < 0.01) c++;
+    }
+
+    // 4. If all balances are settled
+    if (settlements.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Color(0xFFECFDF5),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_outline, size: 64, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "All settled up!",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "No outstanding payments needed.",
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 5. Render Settlement Cards
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text(
+            "Suggested Settlements",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+          ),
+        ),
+        ...settlements.map((s) => Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Payer Name
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s['from'],
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1F2937)),
+                    ),
+                    const Text("pays", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ],
+                ),
+              ),
+              // Arrow Indicator
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.arrow_forward, color: Color(0xFF4F46E5), size: 18),
+              ),
+              // Receiver Name
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s['to'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1F2937)),
+                      ),
+                      const Text("receives", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+              // Amount Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  "₹${(s['amount'] as double).toStringAsFixed(0)}",
+                  style: const TextStyle(
+                    color: Color(0xFF10B981),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )),
+      ],
+    );
+  }
 
 
 
